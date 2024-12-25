@@ -4,6 +4,7 @@ set(PROJECT_NAME CLYX)
 
 project(${PROJECT_NAME})
 
+set(CMAKE_CXX_STANDARD 20)
 option(ENABLE_DEBUG "Enable debugging" OFF)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
