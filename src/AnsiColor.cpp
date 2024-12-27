@@ -1,53 +1,74 @@
 ﻿#include "AnsiColor.hpp"
+#include <algorithm>
 
-AnsiColor::AnsiColor(uint8_t r, uint8_t g, uint8_t b){
-    r = r / 51;
-    g = g / 51;
-    b = b / 51;
-    int color = (16 + 36 * r + 6 * g + b);
-    ansiColorCode = color;
-    setColorCodeString(ansiColorCode);
-}
+template<>
+bool isAnsiSupported<AnsiColor>::is256Supported = false;
+
+template<>
+bool isAnsiSupported<AnsiColor>::isTCSupported = false;
 
 AnsiColor::AnsiColor(Color& color){
-    ansiColorCode = static_cast<int8_t>(color);
-    setColorCodeString(ansiColorCode);
+    colorCode = makeColorCode(static_cast<uint32_t>(color), 0, 0);
+    colorCodeString = makeColorCodeString(colorCode);
 }
 
-void AnsiColor::setColorCodeString(uint8_t color){
-    int formattedColor = static_cast<int>(color);
-    if(initializer.isSupported)
-        ansiColorCodeString = std::format("\033[5;{}m", static_cast<int>(color));
-    else
-        ansiColorCodeString = std::format("\033[{}m", static_cast<int>(color));
+AnsiColor::AnsiColor(uint8_t r, uint8_t g, uint8_t b){
+    uint32_t color = ((r << 16) | (g << 8) | (b << 0));
+    colorCode = makeColorCode(color, 2, 0);
+    colorCodeString = makeColorCodeString(colorCode);
 }
 
 std::string AnsiColor::getColorCodeString() const{
-    return ansiColorCodeString;
+    return colorCodeString;
 }
 
-std::string AnsiColor::getColorCodeString(uint8_t color){
-    ansiColorCode = color;
-    setColorCodeString(color);
-    return ansiColorCodeString;
+int32_t AnsiColor::getColorCode() const{
+    return colorCode;
 }
 
-int8_t AnsiColor::getColorCode() const{
-    return ansiColorCode;
+void AnsiColor::decomposeColor(uint32_t color, uint8_t& r, uint8_t& g, uint8_t& b){
+    r = (color >> 16) & 0xFF;
+    g = (color >> 8) & 0xFF;
+    b = color & 0xFF;
 }
 
-template<>
-bool isAnsi256Supported<AnsiColor>::isSupported = false;
+uint32_t AnsiColor::makeColorCode(uint32_t color, uint8_t type, uint8_t style){
+    return ((color & 0xFFFFFF) << 8) | ((type & 0x3) << 6) | (style & 0x3F);
+}
+
+std::string AnsiColor::makeColorCodeString(uint32_t colorCode){
+    uint8_t type = (colorCode >> 6) & 0x3;
+    uint32_t color = (colorCode >> 8) & 0xFFFFFF;
+    if(type == static_cast<uint8_t>(ColorType::ANSI16)){
+        return std::format("\033[{}m", (color));
+    } else if(type == static_cast<uint8_t>(ColorType::ANSI256)) {
+        if(isAnsiSupported<AnsiColor>::is256Supported)
+            return std::format("\033[38;5;{}m", color);
+    } else if(type == static_cast<uint8_t>(ColorType::RGB)) {
+        if(isAnsiSupported<AnsiColor>::isTCSupported){
+            //std::cout << "R: " << ((color >> 16) & 0xFF) << " G: " << ((color >> 8) & 0xFF) << " B: " << ((color >> 0) & 0xFF);
+            return std::format("\033[38;2;{};{};{}m", (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+
+        }
+    }
+    return "<Fail>";
+}
 
 template <>
-isAnsi256Supported<AnsiColor>::isAnsi256Supported(){
+isAnsiSupported<AnsiColor>::isAnsiSupported(){
     const char* term = std::getenv("TERM");
     if(term){
         size_t pos = std::string(term).find("256color");
         if(pos != std::string::npos)
-            isSupported = true;
+            is256Supported = true;
+    }
+    const char* colorTerm = std::getenv("COLORTERM");
+    if(colorTerm){
+        size_t pos = std::string(colorTerm).find("truecolor");
+        if(pos != std::string::npos)
+            isTCSupported = true;
     }
 }
 
 
-isAnsi256Supported<AnsiColor> AnsiColor::initializer;
+isAnsiSupported<AnsiColor> AnsiColor::initializer;
